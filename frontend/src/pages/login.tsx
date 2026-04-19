@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { useLocation } from "wouter";
+import { setRole } from "@/lib/role";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,17 +15,27 @@ export default function Login() {
   const [error, setError] = useState("");
   const [location, navigate] = useLocation();
 
-  const role = new URLSearchParams(location.split("?")[1]).get("role");
+  const role = new URLSearchParams(window.location.search).get("role");
 
   const handleSubmit = async () => {
     setError("");
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, "users", cred.user.uid), {
+          email: cred.user.email,
+          role: role,
+          createdAt: new Date().toISOString(),
+        });
+        setRole(role as "worker" | "company");
+        navigate(role === "worker" ? "/worker" : "/company");
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        const snap = await getDoc(doc(db, "users", cred.user.uid));
+        const userRole = snap.data()?.role;
+        setRole(userRole as "worker" | "company");
+        navigate(userRole === "worker" ? "/worker" : "/company");
       }
-      navigate(role === "worker" ? "/worker" : "/company");
     } catch (err: any) {
       setError(err.message);
     }
@@ -31,7 +43,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Header — matches landing */}
       <header className="border-b border-border px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
@@ -42,11 +53,8 @@ export default function Login() {
         </div>
       </header>
 
-      {/* Body */}
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="w-full max-w-md">
-
-          {/* Role badge */}
           <div className="flex justify-center mb-6">
             <span className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 border border-primary/30 px-3 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
@@ -61,7 +69,6 @@ export default function Login() {
             {isSignUp ? "Join the Corex network" : "Sign in to continue"}
           </p>
 
-          {/* Card */}
           <div className="bg-card border border-border rounded-xl p-8">
             <div className="space-y-4">
               <input
@@ -80,9 +87,7 @@ export default function Login() {
               />
             </div>
 
-            {error && (
-              <p className="text-red-400 text-xs mt-3">{error}</p>
-            )}
+            {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
 
             <button
               onClick={handleSubmit}
