@@ -508,15 +508,6 @@ export default function CompanyDashboard() {
             >
               <Settings className="w-4 h-4" />
             </button>
-            <span className="text-xs text-muted-foreground hidden sm:inline" data-testid="text-logged-in">demo@company.com</span>
-            <button
-              data-testid="button-switch-role"
-              onClick={exitToHome}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md border border-border transition-colors"
-            >
-              <LogOut className="w-3 h-3" />
-              Switch role
-            </button>
           </div>
         </div>
       </header>

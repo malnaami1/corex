@@ -23,7 +23,7 @@ function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="fixed top-4 right-4 z-50 bg-[#111d35] border border-[#00c2a8]/30 text-[#00c2a8] text-sm px-4 py-2 rounded-lg hover:bg-[#00c2a8] hover:text-black transition"
+      className="fixed top-4 right-4 z-50 bg-primary hover:bg-[#A8D0FF] text-[#05070F] text-sm font-medium px-4 py-2 rounded-md transition-colors"
     >
       Logout
     </button>
@@ -43,13 +43,8 @@ function RoleGuard({ required, children }: { required: Role; children: React.Rea
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login} />
-      <Route path="/landing">
-        <>
-          <LogoutButton />
-          <LandingPage />
-        </>
-      </Route>
+      <Route path="/" component={LandingPage} />
+      <Route path="/login" component={Login} />
       <Route path="/worker">
         <RoleGuard required="worker">
           <LogoutButton />

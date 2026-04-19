@@ -11,7 +11,9 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+
+  const role = new URLSearchParams(location.split("?")[1]).get("role");
 
   const handleSubmit = async () => {
     setError("");
@@ -21,57 +23,92 @@ export default function Login() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      navigate("/landing");
+      navigate(role === "worker" ? "/worker" : "/company");
     } catch (err: any) {
       setError(err.message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-      <div className="bg-[#111d35] border border-[#00c2a8]/30 rounded-xl p-8 w-full max-w-md">
-        <h1 className="text-white text-2xl font-bold mb-1">
-          {isSignUp ? "Create account" : "Welcome back"}
-        </h1>
-        <p className="text-gray-400 text-sm mb-6">
-          {isSignUp ? "Join the Corex network" : "Sign in to Corex"}
-        </p>
-
-        <div className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-[#0a0f1e] border border-gray-700 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#00c2a8]"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-[#0a0f1e] border border-gray-700 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#00c2a8]"
-          />
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Header — matches landing */}
+      <header className="border-b border-border px-6 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div>
+            <span className="text-lg font-bold tracking-tight">Corex</span>
+            <p className="text-xs text-muted-foreground">Core in. Execute out.</p>
+          </div>
+          <span className="text-xs font-mono text-muted-foreground hidden sm:inline">v1.0 · MOCK</span>
         </div>
+      </header>
 
-        {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
+      {/* Body */}
+      <div className="flex-1 flex items-center justify-center px-6">
+        <div className="w-full max-w-md">
 
-        <button
-          onClick={handleSubmit}
-          className="w-full mt-6 bg-[#00c2a8] hover:bg-[#008f7a] text-black font-semibold py-3 rounded-lg transition"
-        >
-          {isSignUp ? "Sign Up" : "Sign In"}
-        </button>
+          {/* Role badge */}
+          <div className="flex justify-center mb-6">
+            <span className="inline-flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 border border-primary/30 px-3 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              {role === "worker" ? "Joining as Worker" : "Joining as Company"}
+            </span>
+          </div>
 
-        <p className="text-gray-500 text-sm text-center mt-4">
-          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-          <span
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-[#00c2a8] cursor-pointer hover:underline"
+          <h1 className="text-4xl font-bold tracking-tight text-center mb-2">
+            {isSignUp ? "Create account" : "Welcome back"}
+          </h1>
+          <p className="text-muted-foreground text-sm text-center mb-8">
+            {isSignUp ? "Join the Corex network" : "Sign in to continue"}
+          </p>
+
+          {/* Card */}
+          <div className="bg-card border border-border rounded-xl p-8">
+            <div className="space-y-4">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-background border border-border text-foreground rounded-md px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-background border border-border text-foreground rounded-md px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground"
+              />
+            </div>
+
+            {error && (
+              <p className="text-red-400 text-xs mt-3">{error}</p>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              className="w-full mt-6 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-[#05070F] bg-primary hover:bg-[#A8D0FF] rounded-md transition-colors"
+            >
+              {isSignUp ? "Sign Up" : "Sign In"}
+            </button>
+
+            <p className="text-muted-foreground text-sm text-center mt-4">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <span
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-primary cursor-pointer hover:underline"
+              >
+                {isSignUp ? "Sign in" : "Sign up"}
+              </span>
+            </p>
+          </div>
+
+          <p
+            onClick={() => navigate("/")}
+            className="text-muted-foreground text-xs text-center mt-4 cursor-pointer hover:text-foreground transition-colors"
           >
-            {isSignUp ? "Sign in" : "Sign up"}
-          </span>
-        </p>
+            ← Back to home
+          </p>
+        </div>
       </div>
     </div>
   );
