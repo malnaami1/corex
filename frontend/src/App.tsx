@@ -8,8 +8,27 @@ import LandingPage from "@/pages/landing";
 import WorkerDashboard from "@/pages/worker";
 import CompanyDashboard from "@/pages/company";
 import { getRole, type Role } from "@/lib/role";
+import Login from "./pages/login";
+import { signOut } from "firebase/auth";
+import { auth } from "./lib/firebase";
 
 const queryClient = new QueryClient();
+
+function LogoutButton() {
+  const [, navigate] = useLocation();
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate("/");
+  };
+  return (
+    <button
+      onClick={handleLogout}
+      className="fixed top-4 right-4 z-50 bg-[#111d35] border border-[#00c2a8]/30 text-[#00c2a8] text-sm px-4 py-2 rounded-lg hover:bg-[#00c2a8] hover:text-black transition"
+    >
+      Logout
+    </button>
+  );
+}
 
 function RoleGuard({ required, children }: { required: Role; children: React.ReactNode }) {
   const [, navigate] = useLocation();
@@ -24,14 +43,22 @@ function RoleGuard({ required, children }: { required: Role; children: React.Rea
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={LandingPage} />
+      <Route path="/" component={Login} />
+      <Route path="/landing">
+        <>
+          <LogoutButton />
+          <LandingPage />
+        </>
+      </Route>
       <Route path="/worker">
         <RoleGuard required="worker">
+          <LogoutButton />
           <WorkerDashboard />
         </RoleGuard>
       </Route>
       <Route path="/company">
         <RoleGuard required="company">
+          <LogoutButton />
           <CompanyDashboard />
         </RoleGuard>
       </Route>
