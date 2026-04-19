@@ -19,6 +19,10 @@ def get_local_ip() -> str:
 
 
 async def register(retries: int = 5, delay: float = 2.0):
+    """
+    Retries registration so the worker survives a slow orchestrator startup.
+    Tries up to `retries` times with `delay` seconds between attempts.
+    """
     payload = WorkerRegister(
         worker_id=config.WORKER_ID,
         webhook_url=f"http://{get_local_ip()}:{config.WEBHOOK_PORT}/jobs/incoming",
