@@ -1,23 +1,38 @@
-import httpx, json, asyncio
+import httpx, json, asyncio, socket
 from sse_manager import sse
+
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    finally:
+        s.close()
 
 async def pick_worker(r, job_types: list):
     ids = await r.smembers("worker:pool")
+    print(f"DEBUG pool: {ids}")
     best, best_rep = None, -1.0
     for wid in ids:
         status = await r.get(f"worker:{wid}:status")
         rep    = float(await r.get(f"worker:{wid}:reputation") or 0)
+        print(f"DEBUG worker {wid}: status={status}, rep={rep}")
         if status == "available" and rep > best_rep:
             info  = await r.hgetall(f"worker:{wid}:info")
             types = json.loads(info.get("job_types", "[]"))
+            print(f"DEBUG types={types}, job_types={job_types}")
             if any(t in types for t in job_types):
                 best     = {"worker_id": wid, **info}
                 best_rep = rep
+    print(f"DEBUG picked: {best}")
     return best
 
 async def dispatch_all(job_id: str, chunks: list, job_type: str, r):
-    base_cb = f"http://localhost:8000/results/{job_id}"
-    queue   = list(chunks)
+    host = get_local_ip()
+    print(f"DEBUG callback host: {host}")
+    base_cb = f"http://{host}:8000/results/{job_id}"
+    print(f"DEBUG callback url: {base_cb}")
+    queue = list(chunks)
     while queue:
         chunk  = queue.pop(0)
         worker = await pick_worker(r, [job_type])
@@ -43,6 +58,7 @@ async def dispatch_all(job_id: str, chunks: list, job_type: str, r):
                 "chunk_id":  chunk["chunk_id"],
                 "worker_id": worker["worker_id"]
             })
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG dispatch error: {e}")
             await r.set(f"worker:{worker['worker_id']}:status", "available")
             queue.insert(0, chunk)

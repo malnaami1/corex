@@ -100,3 +100,9 @@ async def worker_stats(worker_id: str, req: Request):
         "credits_usd": credits or "0.0",
         "cpu_pct":     cpu or "0"
     }
+
+@router.post("/available/{worker_id}")
+async def mark_available(worker_id: str, req: Request):
+    r = req.app.state.redis
+    await r.set(f"worker:{worker_id}:status", "available")
+    return {"status": "ok"}
