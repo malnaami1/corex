@@ -3,3 +3,4 @@ uvicorn
 redis[asyncio]
 httpx
 pydantic
+sentence_transformers

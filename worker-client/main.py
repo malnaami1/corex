@@ -49,7 +49,7 @@ async def process_chunk(chunk: ChunkPayload):
         )
         print(f"✓ chunk={chunk.chunk_id} done in {cpu_seconds:.2f}s")
     except Exception as e:
-        print(f"✗ chunk={chunk.chunk_id} error: {e}")
+        print(f"✗ chunk={chunk.chunk_id} inference error: {e}")
         result = ChunkResult(
             chunk_id=chunk.chunk_id,
             worker_id=config.WORKER_ID,
@@ -58,7 +58,10 @@ async def process_chunk(chunk: ChunkPayload):
             status="error",
         )
 
-    async with httpx.AsyncClient() as client:
-        await client.post(chunk.callback_url, json=result.model_dump(), timeout=10.0)
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(chunk.callback_url, json=result.model_dump(), timeout=10.0)
+    except Exception as e:
+        print(f"✗ callback failed: {e}")
 
     await re_register_available()
