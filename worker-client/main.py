@@ -1,18 +1,52 @@
-# worker-client/main.py
-from fastapi import FastAPI, BackgroundTasks
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import asyncio
+import httpx
+import psutil
 from contextlib import asynccontextmanager
+from fastapi import FastAPI, BackgroundTasks
+
+from schemas import ChunkPayload, ChunkResult
 from registrar import register, unregister, re_register_available
 from executor import execute_embedding
-from schemas import ChunkPayload, ChunkResult
-import httpx, config
+import config
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await register()   # POST to orchestrator on startup
+    await register()
+    task = asyncio.create_task(heartbeat_loop())
     yield
-    await unregister() # cleanup on shutdown
+    task.cancel()
+    await unregister()
+
 
 app = FastAPI(title=f"CPUShare Worker — {config.WORKER_ID}", lifespan=lifespan)
+
+
+async def heartbeat_loop():
+    """
+    Fires every 10 seconds to tell the orchestrator we're still alive
+    and report current CPU usage. The frontend's live CPU meter reads
+    this number. Non-fatal if it fails — worker keeps running.
+    """
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{config.ORCHESTRATOR_URL}/workers/heartbeat",
+                    json={
+                        "worker_id": config.WORKER_ID,
+                        "cpu_pct":   psutil.cpu_percent(interval=1),
+                        "status":    "available",
+                    },
+                    timeout=5.0,
+                )
+                print(f"♡ heartbeat sent | cpu={psutil.cpu_percent()}%")
+        except Exception as e:
+            print(f"  heartbeat failed (non-fatal): {e}")
+        await asyncio.sleep(10)
 
 
 @app.get("/health")
@@ -22,11 +56,11 @@ async def health():
 
 @app.get("/status")
 async def status():
-    """Quick check — curl this during the demo to confirm worker identity."""
     return {
         "worker_id": config.WORKER_ID,
         "region":    config.REGION,
         "job_types": config.JOB_TYPES,
+        "cpu_pct":   psutil.cpu_percent(),
     }
 
 
