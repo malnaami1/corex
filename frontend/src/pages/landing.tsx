@@ -1,13 +1,11 @@
 import { useLocation } from "wouter";
 import { ArrowRight, Cpu, Building2 } from "lucide-react";
-import { setRole } from "@/lib/role";
 
 export default function LandingPage() {
   const [, navigate] = useLocation();
 
   const choose = (role: "worker" | "company") => {
-    setRole(role);
-    navigate(role === "worker" ? "/worker" : "/company");
+    navigate(`/login?role=${role}`);
   };
 
   return (
@@ -22,9 +20,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* HERO — full viewport height */}
       <section className="relative flex items-center justify-center px-6 overflow-hidden" style={{ minHeight: "calc(100vh - 65px)" }}>
-        {/* Soft radial glow */}
         <div
           aria-hidden="true"
           className="absolute pointer-events-none"
@@ -71,7 +67,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* STATS BAR */}
       <section className="border-y border-border px-6 py-8">
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
           {[
@@ -87,10 +82,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ROLE CARDS */}
       <section className="px-6 py-20">
         <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-6">
-          {/* Card 1 — I have compute */}
           <div
             data-testid="card-role-worker"
             className="bg-card border border-card-border rounded-xl p-8 flex flex-col transition-shadow hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]"
@@ -121,7 +114,6 @@ export default function LandingPage() {
             </button>
           </div>
 
-          {/* Card 2 — I need compute */}
           <div
             data-testid="card-role-company"
             className="bg-card border border-card-border rounded-xl p-8 flex flex-col transition-shadow hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]"

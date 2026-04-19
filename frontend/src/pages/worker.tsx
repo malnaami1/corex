@@ -91,7 +91,6 @@ export default function WorkerDashboard() {
   const [credits, setCredits] = useState(0.0428);
   const [jobsGripped, setJobsGripped] = useState(184);
   const [reputation] = useState(94);
-  const [activeCores, setActiveCores] = useState(0);
   const [page, setPage] = useState(1);
   const [bannerDismissed, setBannerDismissed] = useState(() =>
     typeof window !== "undefined" && sessionStorage.getItem("corex.worker.banner") === "1",
@@ -104,6 +103,21 @@ export default function WorkerDashboard() {
   const onlineRef = useRef(online);
   onlineRef.current = online;
 
+  // Derive activeCores directly from chunks state so it's always in sync
+  const activeCores = useMemo(() => {
+    const activeChunk = chunks.find(
+      (c) => c.status === "received" || c.status === "processing"
+    );
+    if (!activeChunk || !online) return 0;
+    // Deterministic core count seeded from chunk_id so it doesn't
+    // flicker on every render — always at least 1
+    const seed =
+      activeChunk.chunk_id.charCodeAt(0) +
+      activeChunk.chunk_id.charCodeAt(1);
+    return Math.max(1, (seed % Math.floor(totalCores / 2)) + 1);
+  }, [chunks, online, totalCores]);
+
+  // CPU meter interval — only updates the chart
   useEffect(() => {
     if (!MOCK) return;
     const id = setInterval(() => {
@@ -115,11 +129,11 @@ export default function WorkerDashboard() {
         ? Math.floor(Math.random() * 20 + 75)
         : Math.floor(Math.random() * 20 + 15);
       setCpuPoints((prev) => [...prev, { t: now, usage }].slice(-31));
-      if (!onlineRef.current || !isSpiking) setActiveCores(0);
     }, 1500);
     return () => clearInterval(id);
   }, []);
 
+  // Chunk dispatcher
   useEffect(() => {
     if (!MOCK) return;
     const timeouts = new Set<ReturnType<typeof setTimeout>>();
@@ -135,32 +149,45 @@ export default function WorkerDashboard() {
         arrived_at: Date.now(),
         job_type: pickJobType(),
       };
+
       spikeUntilRef.current = Date.now() + 8000;
-      const halfMax = Math.max(1, Math.floor(totalCores / 2));
-      setActiveCores(Math.floor(Math.random() * halfMax) + 1);
       setChunks((prev) => [newChunk, ...prev].slice(0, 12));
 
       track(setTimeout(() => {
-        setChunks((prev) => prev.map((c) => (c.chunk_id === newChunk.chunk_id ? { ...c, status: "processing" } : c)));
+        setChunks((prev) =>
+          prev.map((c) =>
+            c.chunk_id === newChunk.chunk_id
+              ? { ...c, status: "processing" }
+              : c
+          )
+        );
       }, 1000));
 
       track(setTimeout(() => {
         const cpuSec = parseFloat((Math.random() * 5 + 2).toFixed(2));
         const payout = parseFloat((Math.random() * 0.002 + 0.0006).toFixed(4));
-        setChunks((prev) => prev.map((c) => (c.chunk_id === newChunk.chunk_id ? { ...c, status: "complete", cpu_seconds: cpuSec, payout } : c)));
+        setChunks((prev) =>
+          prev.map((c) =>
+            c.chunk_id === newChunk.chunk_id
+              ? { ...c, status: "complete", cpu_seconds: cpuSec, payout }
+              : c
+          )
+        );
         setCredits((c) => parseFloat((c + payout).toFixed(4)));
         setJobsGripped((n) => n + 1);
-        setActiveCores(0);
         setHistory((prev) =>
-          [{
-            chunk_id: newChunk.chunk_id,
-            job_id: newChunk.job_id,
-            texts: newChunk.text_count,
-            cpu_seconds: cpuSec,
-            payout,
-            timestamp: nowTime(),
-            job_type: newChunk.job_type,
-          }, ...prev].slice(0, 80),
+          [
+            {
+              chunk_id: newChunk.chunk_id,
+              job_id: newChunk.job_id,
+              texts: newChunk.text_count,
+              cpu_seconds: cpuSec,
+              payout,
+              timestamp: nowTime(),
+              job_type: newChunk.job_type,
+            },
+            ...prev,
+          ].slice(0, 80)
         );
       }, 8000));
     }, 8000);
@@ -170,8 +197,18 @@ export default function WorkerDashboard() {
     };
   }, [totalCores]);
 
-  const reputationColor = reputation >= 90 ? "text-emerald-400" : reputation >= 70 ? "text-amber-400" : "text-red-400";
-  const reputationBg = reputation >= 90 ? "bg-emerald-500" : reputation >= 70 ? "bg-amber-500" : "bg-red-500";
+  const reputationColor =
+    reputation >= 90
+      ? "text-emerald-400"
+      : reputation >= 70
+      ? "text-amber-400"
+      : "text-red-400";
+  const reputationBg =
+    reputation >= 90
+      ? "bg-emerald-500"
+      : reputation >= 70
+      ? "bg-amber-500"
+      : "bg-red-500";
 
   const PER_PAGE = 12;
   const totalPages = Math.max(1, Math.ceil(history.length / PER_PAGE));
@@ -193,12 +230,14 @@ export default function WorkerDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* TOP NAVBAR (logo + center tabs + right controls) */}
+      {/* TOP NAVBAR */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur px-6">
         <div className="max-w-7xl mx-auto h-14 flex items-center justify-between gap-6">
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-base font-bold text-foreground tracking-tight">Corex</span>
-            <span className="text-[11px] text-muted-foreground hidden md:inline">· Core in. Execute out.</span>
+            <span className="text-[11px] text-muted-foreground hidden md:inline">
+              · Core in. Execute out.
+            </span>
           </div>
           <nav className="flex items-center gap-1 h-full" role="tablist">
             {TABS.map((t) => (
@@ -209,11 +248,15 @@ export default function WorkerDashboard() {
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 className={`relative h-full px-4 text-sm font-medium transition-colors ${
-                  tab === t.id ? "text-foreground" : "text-muted-foreground hover:text-primary"
+                  tab === t.id
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-primary"
                 }`}
               >
                 {t.label}
-                {tab === t.id && <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-primary rounded-full" />}
+                {tab === t.id && (
+                  <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-primary rounded-full" />
+                )}
               </button>
             ))}
           </nav>
@@ -226,7 +269,6 @@ export default function WorkerDashboard() {
             >
               <Settings className="w-4 h-4" />
             </button>
-            <span className="text-xs text-muted-foreground hidden sm:inline" data-testid="text-logged-in">worker@corex</span>
             <button
               data-testid="button-switch-role"
               onClick={exitToHome}
@@ -243,10 +285,16 @@ export default function WorkerDashboard() {
       <section className="border-b border-border px-6 py-6">
         <div className="max-w-7xl mx-auto flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight" data-testid="text-page-title">
+            <h1
+              className="text-2xl font-bold text-foreground tracking-tight"
+              data-testid="text-page-title"
+            >
               {tab === "live" ? "Live Activity" : "Job History"}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1" data-testid="text-page-subtitle">
+            <p
+              className="text-sm text-muted-foreground mt-1"
+              data-testid="text-page-subtitle"
+            >
               {tab === "live"
                 ? online
                   ? "Your core is active. Incoming chunks, CPU usage, and earnings update in real time."
@@ -263,7 +311,11 @@ export default function WorkerDashboard() {
                 : "bg-muted text-muted-foreground border-border hover:bg-muted/70"
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${online ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground"}`} />
+            <span
+              className={`w-2 h-2 rounded-full ${
+                online ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground"
+              }`}
+            />
             {online ? "Online" : "Offline"}
           </button>
         </div>
@@ -271,12 +323,17 @@ export default function WorkerDashboard() {
 
       {/* ANNOUNCEMENT BANNER */}
       {!bannerDismissed && (
-        <div data-testid="banner-announcement" className="border-b border-border bg-primary/5 px-6 py-3">
+        <div
+          data-testid="banner-announcement"
+          className="border-b border-border bg-primary/5 px-6 py-3"
+        >
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-sm">
             <div className="flex items-center gap-2 min-w-0">
               <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
               <span className="font-medium text-foreground">Integrity checks active.</span>
-              <span className="text-muted-foreground truncate">Your results are being spot-checked to maintain network reputation.</span>
+              <span className="text-muted-foreground truncate">
+                Your results are being spot-checked to maintain network reputation.
+              </span>
             </div>
             <button
               data-testid="button-dismiss-banner"
@@ -296,35 +353,60 @@ export default function WorkerDashboard() {
           <>
             {/* Stats row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div data-testid="card-jobs-gripped" className="bg-card border border-card-border rounded-lg p-4">
+              <div
+                data-testid="card-jobs-gripped"
+                className="bg-card border border-card-border rounded-lg p-4"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Jobs Gripped</span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Jobs Gripped
+                  </span>
                 </div>
                 <p className="text-2xl font-semibold text-foreground">{jobsGripped}</p>
               </div>
-              <div data-testid="card-credits" className="bg-card border border-card-border rounded-lg p-4">
+
+              <div
+                data-testid="card-credits"
+                className="bg-card border border-card-border rounded-lg p-4"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <DollarSign className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Credits Earned</span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Credits Earned
+                  </span>
                 </div>
                 <p className="text-2xl font-semibold font-mono-accent">${credits.toFixed(4)}</p>
               </div>
-              <div data-testid="card-cpu-cores" className="bg-card border border-card-border rounded-lg p-4">
+
+              <div
+                data-testid="card-cpu-cores"
+                className="bg-card border border-card-border rounded-lg p-4"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <Cpu className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Cores Used</span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Cores Used
+                  </span>
                 </div>
                 <p className="text-2xl font-semibold text-foreground">
-                  <span className={activeCores > 0 ? "font-mono-accent" : ""}>{activeCores}</span>
+                  <span className={activeCores > 0 ? "font-mono-accent" : ""}>
+                    {activeCores}
+                  </span>
                   <span className="text-muted-foreground"> / {totalCores}</span>
                   <span className="text-sm text-muted-foreground font-normal ml-1.5">cores</span>
                 </p>
               </div>
-              <div data-testid="card-reputation" className="bg-card border border-card-border rounded-lg p-4">
+
+              <div
+                data-testid="card-reputation"
+                className="bg-card border border-card-border rounded-lg p-4"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <Star className={`w-4 h-4 ${reputationColor}`} />
-                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Reputation Score</span>
+                  <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Reputation Score
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className={`text-2xl font-semibold ${reputationColor}`}>{reputation}%</p>
@@ -334,17 +416,30 @@ export default function WorkerDashboard() {
             </div>
 
             {/* CPU Meter */}
-            <div data-testid="section-cpu-meter" className="bg-card border border-card-border rounded-lg p-5">
+            <div
+              data-testid="section-cpu-meter"
+              className="bg-card border border-card-border rounded-lg p-5"
+            >
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">Core activity</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">CPU % over the last 60 seconds</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    CPU % over the last 60 seconds
+                  </p>
                 </div>
-                <span className="font-mono text-sm font-medium" style={{ color: lineColor }}>{lastUsage}%</span>
+                <span
+                  className="font-mono text-sm font-medium"
+                  style={{ color: lineColor }}
+                >
+                  {lastUsage}%
+                </span>
               </div>
               <div className="h-56 -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={cpuPoints} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+                  <LineChart
+                    data={cpuPoints}
+                    margin={{ top: 6, right: 8, left: 0, bottom: 0 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,26%,17%)" />
                     <XAxis
                       dataKey="t"
@@ -356,13 +451,34 @@ export default function WorkerDashboard() {
                       axisLine={{ stroke: "hsl(220,26%,20%)" }}
                       tickLine={false}
                     />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#6B7FA3" }} axisLine={{ stroke: "hsl(220,26%,20%)" }} tickLine={false} unit="%" />
-                    <Tooltip
-                      contentStyle={{ background: "#0C1220", border: "1px solid #1A2236", borderRadius: "6px", fontSize: "12px", color: "#EAF0FF" }}
-                      labelFormatter={(v) => new Date(v).toLocaleTimeString("en-US", { hour12: false })}
-                      formatter={(v: number) => [`${v}%`, "CPU"]}
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: "#6B7FA3" }}
+                      axisLine={{ stroke: "hsl(220,26%,20%)" }}
+                      tickLine={false}
+                      unit="%"
                     />
-                    <Line type="monotone" dataKey="usage" stroke={lineColor} strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#0C1220",
+                        border: "1px solid #1A2236",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        color: "#EAF0FF",
+                      }}
+                      labelFormatter={(v) =>
+                        new Date(v).toLocaleTimeString("en-US", { hour12: false })
+                      }
+                      formatter={(v) => [`${v}%`, "CPU"] as [string, string]}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="usage"
+                      stroke={lineColor}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -374,7 +490,9 @@ export default function WorkerDashboard() {
               <div className="bg-card border border-card-border rounded-lg overflow-hidden">
                 {chunks.length === 0 ? (
                   <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    {online ? "Listening for incoming chunks..." : "Toggle online to receive work"}
+                    {online
+                      ? "Listening for incoming chunks..."
+                      : "Toggle online to receive work"}
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
@@ -384,13 +502,34 @@ export default function WorkerDashboard() {
                         data-testid={`row-chunk-${c.chunk_id}`}
                         className="grid grid-cols-12 items-center gap-3 px-4 py-3 text-xs animate-in slide-in-from-top-2 fade-in duration-300"
                       >
-                        <span className="col-span-3 font-mono-accent" title={c.chunk_id}>{shortId(c.chunk_id)}</span>
-                        <span className="col-span-2 text-muted-foreground">{c.text_count} texts</span>
-                        <span className="col-span-3 font-mono text-muted-foreground">{c.region}</span>
+                        <span
+                          className="col-span-3 font-mono-accent"
+                          title={c.chunk_id}
+                        >
+                          {shortId(c.chunk_id)}
+                        </span>
+                        <span className="col-span-2 text-muted-foreground">
+                          {c.text_count} texts
+                        </span>
+                        <span className="col-span-3 font-mono text-muted-foreground">
+                          {c.region}
+                        </span>
                         <div className="col-span-2">
-                          {c.status === "received" && <span className="text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">Received</span>}
-                          {c.status === "processing" && <span className="text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-full">Processing</span>}
-                          {c.status === "complete" && <span className="text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">Complete</span>}
+                          {c.status === "received" && (
+                            <span className="text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                              Received
+                            </span>
+                          )}
+                          {c.status === "processing" && (
+                            <span className="text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-full">
+                              Processing
+                            </span>
+                          )}
+                          {c.status === "complete" && (
+                            <span className="text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                              Complete
+                            </span>
+                          )}
                         </div>
                         <span className="col-span-2 text-right font-mono text-muted-foreground">
                           {c.cpu_seconds ? `${c.cpu_seconds}s` : "—"}
@@ -410,33 +549,76 @@ export default function WorkerDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Chunk ID</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Job ID</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Texts</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">CPU sec</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Payout</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Timestamp</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Chunk ID
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Job ID
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Texts
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      CPU sec
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Payout
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Timestamp
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {pageRows.map((row) => (
-                    <tr key={row.chunk_id} data-testid={`row-history-${row.chunk_id}`} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-2.5 font-mono-accent text-xs" title={row.chunk_id}>{shortId(row.chunk_id)}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground" title={row.job_id}>{shortId(row.job_id)}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.texts}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{row.cpu_seconds}s</td>
-                      <td className="px-4 py-2.5 text-xs font-mono-accent">${row.payout.toFixed(4)}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">{row.timestamp}</td>
+                    <tr
+                      key={row.chunk_id}
+                      data-testid={`row-history-${row.chunk_id}`}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td
+                        className="px-4 py-2.5 font-mono-accent text-xs"
+                        title={row.chunk_id}
+                      >
+                        {shortId(row.chunk_id)}
+                      </td>
+                      <td
+                        className="px-4 py-2.5 font-mono text-xs text-muted-foreground"
+                        title={row.job_id}
+                      >
+                        {shortId(row.job_id)}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                        {row.texts}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
+                        {row.cpu_seconds}s
+                      </td>
+                      <td className="px-4 py-2.5 text-xs font-mono-accent">
+                        ${row.payout.toFixed(4)}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
+                        {row.timestamp}
+                      </td>
                     </tr>
                   ))}
                   {pageRows.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">No history yet</td></tr>
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-muted-foreground text-sm"
+                      >
+                        No history yet
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-muted/30">
-                  <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Page {page} of {totalPages}
+                  </span>
                   <div className="flex items-center gap-1">
                     <button
                       data-testid="button-prev-page"
@@ -464,7 +646,11 @@ export default function WorkerDashboard() {
         )}
       </main>
 
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} role="worker" />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        role="worker"
+      />
     </div>
   );
 }
