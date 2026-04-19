@@ -18,6 +18,7 @@ import { clearRole } from "@/lib/role";
 import { JobModal, type JobSubmissionPayload } from "@/components/JobModal";
 import { SettingsModal } from "@/components/SettingsModal";
 
+const ORCHESTRATOR = import.meta.env.VITE_ORCHESTRATOR_URL ?? "http://localhost:8000";
 const MOCK = true;
 
 type Stage = "submitted" | "sharding" | "dispatching" | "processing" | "verifying" | "complete";
@@ -386,20 +387,29 @@ export default function CompanyDashboard() {
   }, []);
 
   // Fleet refresh
-  useEffect(() => {
-    if (!MOCK) return;
-    const id = setInterval(() => {
-      setFleet((prev) =>
-        prev.map((f) => ({
-          ...f,
-          workers: Math.max(20, Math.min(220, f.workers + Math.floor(Math.random() * 14) - 7)),
-          chunks: f.chunks + Math.floor(Math.random() * 30),
-          verification_failures: Math.random() < 0.05 ? f.verification_failures + 1 : f.verification_failures,
-        })),
-      );
-    }, 4000);
-    return () => clearInterval(id);
-  }, []);
+useEffect(() => {
+  const fetchPool = async () => {
+    try {
+      const res = await fetch(`${ORCHESTRATOR}/workers/pool`);
+      const workers = await res.json();
+      if (!workers || workers.length === 0) return;
+      const realFleet: FleetRow[] = workers.map((w: any) => ({
+        region: w.region ?? "unknown",
+        workers: 1,
+        reputation: Math.round(parseFloat(w.reputation ?? "1.0") * 50),
+        chunks: 0,
+        verification_failures: 0,
+        latency_ms: 40,
+        lat: REGIONS_INFO.find((r) => r.region === w.region)?.lat ?? 37.9,
+        lng: REGIONS_INFO.find((r) => r.region === w.region)?.lng ?? -77.0,
+      }));
+      setFleet(realFleet);
+    } catch {}
+  };
+  fetchPool();
+  const id = setInterval(fetchPool, 5000);
+  return () => clearInterval(id);
+}, []);
 
   // Integrity events
   useEffect(() => {
@@ -419,12 +429,23 @@ export default function CompanyDashboard() {
     };
   }, []);
 
-  const handleJobSubmit = useCallback((p: JobSubmissionPayload) => {
-    const chunks_total = Math.max(1, Math.ceil(p.texts.length / p.chunkSize));
+  const handleJobSubmit = useCallback(async (p: JobSubmissionPayload) => {
+  try {
+    const res = await fetch(`${ORCHESTRATOR}/jobs/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        texts: p.texts,
+        callback_url: `${ORCHESTRATOR}/noop`,
+        type: "embedding"
+      })
+    });
+    const data = await res.json();
+    const chunks_total = data.total_chunks;
     const cost = chunks_total * 0.000011;
-    const regionsUsed = REGIONS_INFO.slice(0, Math.min(3, Math.floor(Math.random() * 3) + 2)).map((r) => r.region);
+    const regionsUsed = ["us-east-1"];
     const newJob: PipelineJob = {
-      job_id: makeJobId(),
+      job_id: data.job_id,
       texts: p.texts.length,
       chunks_total,
       cost_usd: cost,
@@ -438,17 +459,17 @@ export default function CompanyDashboard() {
     };
     setJobs((prev) => [newJob, ...prev]);
     setSelectedJobId(newJob.job_id);
-    setPulseRegions((s) => {
-      const n = new Set(s);
-      regionsUsed.forEach((r) => n.add(r));
-      return n;
-    });
     setModalOpen(false);
     setTab("pipeline");
     setToast(`Job submitted · ${p.texts.length} texts · ${chunks_total} chunks`);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
-  }, []);
+  } catch {
+    setToast("Failed to submit — is the orchestrator running?");
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  }
+}, []);
 
   // Auto-select newest if none selected
   useEffect(() => {

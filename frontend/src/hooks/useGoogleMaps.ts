@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 declare global {
   interface Window {
     google: any;
-    __corexGmapsCb?: () => void;
+    corexGmapsCb?: () => void;
   }
 }
 
@@ -15,7 +15,7 @@ function loadGoogleMaps(apiKey: string): Promise<typeof window.google> {
   if (loadPromise) return loadPromise;
 
   loadPromise = new Promise((resolve, reject) => {
-    const cbName = "__corexGmapsCb";
+    const cbName = "corexGmapsCb";
     window[cbName] = () => {
       resolve(window.google);
     };
