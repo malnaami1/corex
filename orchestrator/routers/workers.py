@@ -19,6 +19,8 @@ async def register(worker: WorkerRegister, req: Request):
     })
     await r.set(f"worker:{worker.worker_id}:status",     "available")
     await r.set(f"worker:{worker.worker_id}:reputation", "1.0")
+    await r.expire(f"worker:{worker.worker_id}:status", 60)
+    await r.expire(f"worker:{worker.worker_id}:info",   60)
     await sse.broadcast("company", {
         "type":      "worker_online",
         "worker_id": worker.worker_id,
@@ -74,6 +76,8 @@ async def heartbeat(req: Request):
     body = await req.json()
     r = req.app.state.redis
     await r.set(f"worker:{body['worker_id']}:cpu_pct", body["cpu_pct"])
+    await r.expire(f"worker:{body['worker_id']}:status", 60)
+    await r.expire(f"worker:{body['worker_id']}:info", 60)
     await sse.broadcast("company", {
         "type":      "heartbeat",
         "worker_id": body["worker_id"],
